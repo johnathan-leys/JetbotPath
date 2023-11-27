@@ -15,7 +15,8 @@ def read_points_from_file(filename):
     points.reverse()    #Points will be in wrong order by default
     return points
 
-def calculate_angle_and_distance(points): #Gives the angle relative to the point with Atan2
+# Gives the angle relative to the point with Atan2
+def calculate_angle_and_distance(points): 
     angles_and_distances = []
 
     for i in range(len(points) - 1):
@@ -49,7 +50,7 @@ def calculate_vectors(points):
 
     return vectors
 
-#This one resets robot orientation to 0,0 upon reaching each point. Resets coordinate fram, gives
+# This one resets robot orientation to 0,0 upon reaching each point. Resets coordinate fram, gives
 # angles jetbot needs to acutally turn.
 def calculate_robot_path(points):
     angles_and_distances = []
@@ -73,7 +74,6 @@ def calculate_robot_path(points):
 
         angles_and_distances.append((relative_angle_degrees, distance))
 
-        # Update the current angle
         current_angle = next_angle
 
     return angles_and_distances

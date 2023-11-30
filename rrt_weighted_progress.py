@@ -1,24 +1,28 @@
 #!/usr/bin/python3
 
-# this program is an RRT* implementation, with some operations discretized to
-# make some calculations easier.
+# this program is really inefficient RRT* implementation, with some operations
+# discretized to make some calculations easier.
 
-import numpy as np
 import random
+import numpy as np
 import matplotlib.pyplot as plt
-import pprint
 
 class RRT:
-    def __init__(self, start, goal, obstacles):
+    def __init__(self, start, goal, obstacles, iterations=1000,
+                 quit_on_goal=True, seeded=False, seed=1234):
         self.start = start
         self.goal = goal
         self.obstacles = obstacles
 
-        self.iterations = 1000
-        self.occasional_plot = True
-        self.stepsize = 50
-        self.point_separation = 0.025 #how far apart nodes on line are
-        self.neighborhood_radius = 0.25
+        self.iterations = iterations
+        self.seeded = seeded
+        self.seed = seed
+
+        self.occasional_plot = False
+        self.quit_on_goal = quit_on_goal
+        self.stepsize = 25
+        self.point_separation = 0.05 #how far apart nodes on line are
+        self.neighborhood_radius = 0.1
 
         self.radius = 0.05 # bot is a point for now
         self.max_bound = 1.2
@@ -30,7 +34,13 @@ class RRT:
 
 
     # the "main event" of the class, this runs through the RRT* algorithm
+    #
+    # TODO: collision detection should be moved to a method.
+    #
     def plan(self):
+        if self.seeded == True:
+            np.random.seed(self.seed)
+
         for i in range(self.iterations):
             rand_pt = tuple(np.random.rand(2)*(self.max_bound-self.min_bound)+self.min_bound)
 
@@ -54,22 +64,46 @@ class RRT:
 
             best_pt, new_pt_cost, neighbors = self.find_neighbors(nearest_pt, first_non_colliding)
 
+            steps = int(np.floor(self.stepsize * new_pt_cost))
+            if steps <= 0: # skip points that are too close
+                continue
+            all_pts = self.create_point_chain(best_pt, first_non_colliding, steps)
+            collisions = self.points_will_collide(all_pts)
+            if any(collisions): # first point already collides
+                continue
+
             added_pt = self.add_line_to_graph(first_non_colliding, best_pt)
 
             # if its more cost effective to reach neighbor thru new_pt, reroute
             for n in neighbors:
                 n_cost = new_pt_cost + self.pythagoras(added_pt[0], n[0])
                 if n_cost < n[1]:
+
+                    steps = int(np.floor(self.stepsize * n_cost))
+                    if steps <= 0: # skip points that are too close
+                        continue
+                    all_pts = self.create_point_chain(n, added_pt[0], steps)
+                    collisions = self.points_will_collide(all_pts)
+                    if any(collisions):
+                        continue
+
                     new_n = (n[0], n_cost)
                     self.update_parent(self.graph, n, new_n, added_pt)
                     self.graph[added_pt].append(n)
 
 
             # we reached the goal, quit the planning function
-            if self.close_enough_to_goal(first_non_colliding):
+            if self.close_enough_to_goal(first_non_colliding) and self.quit_on_goal:
                 print("iterations reqired: " + str(i))
                 path = self.get_final_path(first_non_colliding)
-                break
+
+                fig, ax = plt.subplots()
+                ax.set_title("i = " + str(i) + "(quit on goal found)")
+                self.plot_obstacles(ax)
+                self.plot_path(ax, path)
+                self.plot_graph(ax, self.graph)
+
+                return path
 
             if i % 25 == 0 and self.occasional_plot:
                 fig, ax = plt.subplots()
@@ -78,13 +112,24 @@ class RRT:
                 self.plot_graph(ax, self.graph)
                 plt.show()
 
-        fig, ax = plt.subplots()
-        self.plot_obstacles(ax)
-        self.plot_path(ax, path)
-        self.plot_graph(ax, self.graph)
-        plt.show()
+        # find the closest point to the goal and use that for the path
+        for parent, child in self.graph.items():
+            for c in child:
+                if self.close_enough_to_goal(c[0]):
+                    print("iterations completed: " + str(self.iterations))
+                    path = self.get_final_path(c[0])
 
-        return path
+                    fig, ax = plt.subplots()
+                    ax.set_title("i = " + str(self.iterations))
+                    self.plot_obstacles(ax)
+                    self.plot_path(ax, path)
+                    self.plot_graph(ax, self.graph)
+
+                    return path
+
+        print("unable to find path in " + str(self.iterations) + " iterations");
+        return (0.0, 0.0)
+
 
 
 
@@ -314,9 +359,9 @@ class RRT:
     # axes passed to it.
     def plot_obstacles(self, ax):
         ax.plot(self.start[0], self.start[1], 'r+', \
-                markersize = 10, label='start')
+                markersize = 15, label='start')
         ax.plot(self.goal[0], self.goal[1], 'g*', \
-                markersize = 10, label='start')
+                markersize = 12, label='start')
 
         for ob in self.obstacles:
             ax.add_patch(plt.Circle((ob[0], ob[1]), ob[2], color='black'))
@@ -329,7 +374,7 @@ class RRT:
     def plot_path(self, ax, path):
         for i in range(1,len(path)):
             ax.plot((path[i-1][0], path[i][0]),
-                    (path[i-1][1], path[i][1]), 'green', linewidth=5)
+                    (path[i-1][1], path[i][1]), 'green', linewidth=6)
 
 
 
@@ -361,7 +406,8 @@ class RRT:
         for node, children in graph.items():
             ax.plot(node[0][0], node[0][1], 'y*', markersize=3, label='point')
             for child in children:
-                ax.plot((node[0][0], child[0][0]), (node[0][1], child[0][1]), 'k-')
+                ax.plot((node[0][0], child[0][0]), (node[0][1], child[0][1]),
+                        'k-', linewidth=0.1)
                 #ax.plot(child[0][0], child[0][1], 'y*', markersize=5, label='point')
                 child_list.append((child[0][0], child[0][1]))
                 weight_list.append(child[1])
@@ -431,22 +477,26 @@ def main():
     goal = (0.5, .75, 0.02)
     start = (0.0, 0.0)
     # 3rd dimension is radius, assumed to be a circle
-    obstacles = [(0.3, 0.5, 0.1), (0.4, 0.2, 0.13), \
-                 (0.0, 0.6, 0.15), (0.8, -0.2, 0.1), \
-                 (0.9, 0.8, 0.08)]
+    obstacles = [(0.3, 0.5, 0.11), (0.4, 0.2, 0.14), \
+                 (0.0, 0.6, 0.16), (0.8, -0.2, 0.11), \
+                 (0.9, 0.8, 0.09)]
 
-    rrt = RRT(start, goal, obstacles)
-    #rrt.gen_random_graph()
-    #rrt.print_random_testing_graph()
-    #plt.show()
-    path = rrt.plan()
-    for item in path:
-        print(tuple(item))
-    for v in rrt.graph.keys():
-        if v[0][0] != v[1]:
-            print(v)
-    #pp = pprint.PrettyPrinter(compact=True)
-    #pp.pprint(rrt.graph)
+    s = 123
+    rrt1 = RRT(start, goal, obstacles)
+    rrt2 = RRT(start, goal, obstacles, iterations=300, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrt3 = RRT(start, goal, obstacles, iterations=600, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrt4 = RRT(start, goal, obstacles, iterations=1200, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrts = [rrt1, rrt2, rrt3, rrt4]
+
+    for i in range(4):
+        rrts[i].plan()
+
+    plt.show()
+
+
 
 if __name__ == '__main__':
     main()

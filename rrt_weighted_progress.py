@@ -52,8 +52,18 @@ class RRT:
                 # take cost from initial calc above
                 first_non_colliding = rand_pt
 
-            best_pt, neighbors = self.find_neighbors(nearest_pt, cost, first_non_colliding)
-            self.add_line_to_graph(first_non_colliding, nearest_pt)
+            best_pt, new_pt_cost, neighbors = self.find_neighbors(nearest_pt, first_non_colliding)
+
+            added_pt = self.add_line_to_graph(first_non_colliding, best_pt)
+
+            # if its more cost effective to reach neighbor thru new_pt, reroute
+            for n in neighbors:
+                n_cost = new_pt_cost + self.pythagoras(added_pt[0], n[0])
+                if n_cost < n[1]:
+                    new_n = (n[0], n_cost)
+                    self.update_parent(self.graph, n, new_n, added_pt)
+                    self.graph[added_pt].append(n)
+
 
             # we reached the goal, quit the planning function
             if self.close_enough_to_goal(first_non_colliding):
@@ -78,6 +88,59 @@ class RRT:
 
 
 
+    # this will remove the old pt from the old parent, and the new pt with the
+    # new cost will be assigned to new_parent, and the new costs will be
+    # propagated to its children
+    #
+    # new parent should already exist in the graph.
+    #
+    # very slow, would be much better with a Node class that had a pointer to
+    # its parent. instead here it searches the entire graph for the point of
+    # interest, removes it from it's parent's list and add it to new parent's
+    # list.
+    #
+    # also extra slow because the graph is searched a bunch of times in order to
+    # update the children's costs. I just can't be bothered right now to write
+    # up a tree structure and its methods ... :(
+    #
+    #   input ->    dict G with parent child relations of points, with costs
+    #               pt ((float x, float y), cost)
+    #               new_parent ((float x, float y), cost)
+    def update_parent(self, G, old_pt, new_pt, new_parent):
+        for parent, children in G.items():
+            for c in children:
+                # if the point is in the list of children
+                if c[0][0] == old_pt[0][0] and c[0][1] == old_pt[0][1]:
+                    G[parent] = [x for x in G[parent] if (x[0][0] != old_pt[0][0] and
+                                       x[0][1] != old_pt[0][1])]
+
+                    G[new_parent].append(new_pt)
+                    if new_pt in G.keys():
+                        self.update_children_costs(self.graph, new_pt, old_pt[1]-new_pt[1])
+
+                    # each point should only be one child?
+                    return True
+        return False # hopefully unreachable if both points exist in G?
+
+
+
+    # slow cost updating. see description of self.update_parent()
+    def update_children_costs(self, G, parent, cost_diff):
+        for child in G[parent]:
+            # hack
+            try:
+                G[child]
+            except:
+                new_cost = child[1] - cost_diff
+                child = (child[0], new_cost)
+
+            self.update_children_costs(G, child, cost_diff)
+
+            return
+        return
+
+
+
     # returns the "best" point to connect the new point to, based on the
     # previous point's costs, as well as all points that lie in the neighborhood
     # of the new pt
@@ -85,10 +148,11 @@ class RRT:
     #   input ->    nearest_pt: ((float x, float y), float cost)
     #               new_pt: (float x, float y)
     #   output ->   best_pt: ((float x, float y), float cost)
+    #               best_cost: float, the best cost to get to the new_pt
     #               neighbors: [((float x, float y), float cost), ... ]
     def find_neighbors(self, nearest_pt, new_pt):
         # start by assuming the nearest pt is the best
-        best_dist = self.pythagoras(nearest_pt[0], new_pt)
+        best_cost = nearest_pt[1] + self.pythagoras(nearest_pt[0], new_pt)
         best_pt = nearest_pt
         neighbors = []
 
@@ -96,10 +160,12 @@ class RRT:
             dist = self.pythagoras(new_pt, pt[0])
             if dist < self.neighborhood_radius:
                 neighbors.append(pt)
-                if dist < best_dist:
+                cost = pt[1] + self.pythagoras(pt[0], new_pt)
+                if cost < best_cost:
+                    best_cost = cost
                     best_pt = pt
 
-        return best_pt, neighbors
+        return best_pt, best_cost, neighbors
 
 
 
@@ -121,6 +187,9 @@ class RRT:
         for i in range(npts-1):
             self.graph.setdefault(point_chain[i], [point_chain[i+1]])
         self.graph.setdefault(point_chain[npts-1], [])
+
+        # get the location and cost of new_pt
+        return point_chain[npts-1]
 
 
 

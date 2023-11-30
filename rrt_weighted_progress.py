@@ -1,8 +1,7 @@
 #!/usr/bin/python3
 
-# this program is a WIP RRT* implementation, it's an RRT implementation but with
-# costs added to the graph, and some other helper functions currently being
-# added as well.
+# this program is an RRT* implementation, with some operations discretized to
+# make some calculations easier.
 
 import numpy as np
 import random
@@ -30,26 +29,7 @@ class RRT:
 
 
 
-    def plot_obstacles(self, ax):
-        ax.plot(self.start[0], self.start[1], 'r+', \
-                markersize = 10, label='start')
-        ax.plot(self.goal[0], self.goal[1], 'g*', \
-                markersize = 10, label='start')
-
-        for ob in self.obstacles:
-            ax.add_patch(plt.Circle((ob[0], ob[1]), ob[2], color='black'))
-        for pt in self.points:
-            ax.plot(pt[0], pt[1], pt[2], markersize=5, label='point')
-
-
-
-    def plot_path(self, ax, path):
-        for i in range(1,len(path)):
-            ax.plot((path[i-1][0], path[i][0]),
-                    (path[i-1][1], path[i][1]), 'green', linewidth=5)
-
-
-
+    # the "main event" of the class, this runs through the RRT* algorithm
     def plan(self):
         for i in range(self.iterations):
             rand_pt = tuple(np.random.rand(2)*(self.max_bound-self.min_bound)+self.min_bound)
@@ -98,10 +78,17 @@ class RRT:
 
 
 
-    # could be better to start with the neighbors of the nearest pt?
-    def find_neighbors(self, nearest_pt, start_dist, new_pt):
+    # returns the "best" point to connect the new point to, based on the
+    # previous point's costs, as well as all points that lie in the neighborhood
+    # of the new pt
+    #
+    #   input ->    nearest_pt: ((float x, float y), float cost)
+    #               new_pt: (float x, float y)
+    #   output ->   best_pt: ((float x, float y), float cost)
+    #               neighbors: [((float x, float y), float cost), ... ]
+    def find_neighbors(self, nearest_pt, new_pt):
         # start by assuming the nearest pt is the best
-        best_dist = start_dist
+        best_dist = self.pythagoras(nearest_pt[0], new_pt)
         best_pt = nearest_pt
         neighbors = []
 
@@ -116,8 +103,13 @@ class RRT:
 
 
 
+    # adds line of points from nearest to new, separated by at least point_sep,
+    # to the graph. the costs of the added point are based on the starting
+    # point.
+    #
+    #   input ->    new_pt: (float x, float y)
+    #               nearest_pt: ((float x, float y), float cost)
     def add_line_to_graph(self, new_pt, nearest_pt):
-        # line of points from nearest to new, separated by at least point_sep
         npts = int(self.pythagoras(new_pt, nearest_pt[0])/self.point_separation)+1
         if npts == 1:
             npts = 2
@@ -132,6 +124,13 @@ class RRT:
 
 
 
+    # creates a list of points and associated costs, starting from start and
+    # ending at end. this is used for adding points to the graph and also for
+    # the discretized collision detection.
+    #
+    #   input ->    start: tuple (float x, float y)
+    #               end: tuple ((float x, float y), float cost)
+    #   output ->   chain: list [((float x, float y), float cost), ... ]
     def create_point_chain(self, start, end, npts):
         run = end[0] - start[0][0]
         rise = end[1] - start[0][1]
@@ -146,12 +145,47 @@ class RRT:
 
 
 
-    # distance between two points
+    # calculates distance between two points
+    #
+    #   input ->    p1: (float x, float y)
+    #               p2: (float x, float y)
+    #   output ->   float
     def pythagoras(self, p1, p2):
         return np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
 
 
 
+    # returns closest vertex on graph
+    #
+    #   input ->    G: dictionary, the graph to search for nearest points
+    #               new_pt: (float x, float y)
+    def closest_point_on_graph(self, G, new_pt):
+        # set large distance and origin for initial value
+        closest = ((0.0, 0.0), 0.0)
+        smallest_dist = abs(self.max_bound) + abs(self.min_bound)
+
+        #don't look at the chldren of parents w/o children
+        for vertex in G.keys():
+            dist = self.pythagoras(new_pt, vertex[0])
+            if dist < smallest_dist:
+                closest = vertex
+                smallest_dist = dist
+
+        # check to see if the key has any children
+        for leaf in G[closest]:
+            dist = self.pythagoras(new_pt, leaf[0])
+            if dist < smallest_dist:
+                closest = leaf
+                smallest_dist = dist
+
+        return closest, dist
+
+
+
+    # checks collision of a single point
+    #
+    #   input ->    pt: ((float x, float y), float cost)
+    #   output ->   bool, True for collision occur
     def it_will_collide(self, pt):
         for ob in self.obstacles:
             # find distance between point and obstacle center, compare to
@@ -162,6 +196,11 @@ class RRT:
 
 
 
+    # check collision of a list of points, returns a list of same length as pts
+    # that contains whether or not each point will collide
+    #
+    #   input ->    pts: [((float x, float y), float cost)]
+    #   output ->   collisions [bool, ...] True for collision occur.
     def points_will_collide(self, pts):
         collisions = list(pts)
         for i, pt in enumerate(collisions):
@@ -174,12 +213,21 @@ class RRT:
 
 
 
+    # check if a point is close enough to the goal
+    #
+    #   input ->    pt: (float x, float y)
+    #   output ->   bool, true for close to goal
     def close_enough_to_goal(self, pt):
         return np.sqrt((pt[0] - self.goal[0])**2 + \
                        (pt[1] - self.goal[1])**2) < self.goal[2] + 0.07
 
 
 
+    # traverse the graphs parents in order to get path from pt to start. This is
+    # kind of a shitty function and will hang in infinite loop if it doesnt
+    # get back to the start
+    #
+    #   input ->    pt: (float x, float y), must be a vertex in the graph
     def get_final_path(self, pt):
         final_path = [pt]
         # follow parents up
@@ -193,6 +241,30 @@ class RRT:
 
 
 
+    # adds the defined obstacles as well as the start and end points to the
+    # axes passed to it.
+    def plot_obstacles(self, ax):
+        ax.plot(self.start[0], self.start[1], 'r+', \
+                markersize = 10, label='start')
+        ax.plot(self.goal[0], self.goal[1], 'g*', \
+                markersize = 10, label='start')
+
+        for ob in self.obstacles:
+            ax.add_patch(plt.Circle((ob[0], ob[1]), ob[2], color='black'))
+        for pt in self.points:
+            ax.plot(pt[0], pt[1], pt[2], markersize=5, label='point')
+
+
+
+    # visualizes the final path
+    def plot_path(self, ax, path):
+        for i in range(1,len(path)):
+            ax.plot((path[i-1][0], path[i][0]),
+                    (path[i-1][1], path[i][1]), 'green', linewidth=5)
+
+
+
+    # testing func
     def gen_random_graph(self, nvertices=10, edge_density=0.3):
         graph = {}
         vertices = (np.random.rand(nvertices, 2) * self.max_bound - \
@@ -212,6 +284,7 @@ class RRT:
 
 
 
+    # places graph on axes, and colors based on cost
     def plot_graph(self, ax, graph):
         # graph each node, and connect it to its children.
         child_list = []
@@ -230,7 +303,8 @@ class RRT:
 
 
 
-    # similar to plot graph but I used this one for testing
+    # similar to plot graph but I used this one for testing. can probably be
+    # deleted to be honest
     def print_random_testing_graph(self):
         graph = self.gen_random_graph()
         fig, ax = plt.subplots()
@@ -280,30 +354,6 @@ class RRT:
         #        else:
         #            ax.plot((pts[0][0], pts[-1][0]), (pts[0][1], pts[-1][1]), 'g-')
         #        break
-
-
-
-    # returns closest vertex on graph
-    def closest_point_on_graph(self, G, new_pt):
-        # set large distance and origin for initial value
-        closest = ((0.0, 0.0), 0.0)
-        smallest_dist = abs(self.max_bound) + abs(self.min_bound)
-
-        #don't look at the chldren of parents w/o children
-        for vertex in G.keys():
-            dist = self.pythagoras(new_pt, vertex[0])
-            if dist < smallest_dist:
-                closest = vertex
-                smallest_dist = dist
-
-        # check to see if the key has any children
-        for leaf in G[closest]:
-            dist = self.pythagoras(new_pt, leaf[0])
-            if dist < smallest_dist:
-                closest = leaf
-                smallest_dist = dist
-
-        return closest, dist
 
 
 

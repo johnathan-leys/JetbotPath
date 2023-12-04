@@ -1,3 +1,5 @@
+# File contains code used in the ROS2 node onboard the jetbot
+
 import rclpy
 import numpy as np
 import math

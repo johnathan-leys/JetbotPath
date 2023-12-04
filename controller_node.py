@@ -1,5 +1,3 @@
-# File contains code used in the ROS2 node onboard the jetbot
-
 import rclpy
 import numpy as np
 import math
@@ -11,6 +9,20 @@ import numpy as np
 from queue import PriorityQueue
 #movement
 import time
+
+#for RRT
+import random
+import matplotlib.pyplot as plt
+#from rrt_weighted_progress import *
+
+# Import the RRT algo: needed due to ROS2 interface/calling
+import sys
+import os
+module_dir = '/home/jetbot/ece498/ws/src/aruco_controller/aruco_controller'
+sys.path.append(module_dir)
+from rrt_weighted_progress import *
+
+
 
 
 class ArucoNode(Node):
@@ -38,69 +50,51 @@ class ArucoNode(Node):
         
         theta = 0; # Current angle
         
+        # Init with non-zero values for testing
+        Goal_xpos = 0.5
+        Goal_zpos = 0.5
+        
+        Obs1_xpos = 0.5
+        Obs1_zpos = 0.3
+        
+        
+        for i in range(0, len(aruco_msg.markers)):
+            if (aruco_msg.markers[i].marker_id == 0):              #goal
+                Goal_xpos = aruco_msg.markers[0].pose.position.x   #left/right, neg=left
+                Goal_ypos = aruco_msg.markers[0].pose.position.y   #upd/down
+                Goal_zpos = aruco_msg.markers[0].pose.position.z   #distance, meters
+            # To start, only use goal
+            elif (aruco_msg.markers[i].marker_id == 1):              #obstacle
+                Obs1_xpos = aruco_msg.markers[0].pose.position.x   #left/right, neg=left
+                Obs1_ypos = aruco_msg.markers[0].pose.position.y   #upd/down
+                Obs1_zpos = aruco_msg.markers[0].pose.position.z   #distance, meters
+            
+        Start = (0.0,0.0)
+        Goal = (Goal_xpos, Goal_zpos, 0.02)   #0.02 radius
+        Obstacles =  [(Obs1_xpos, Obs1_zpos, 0.01), (2.5, 2.5, 0.1)]  # added fake obstacle
+        
+        rrt = RRT(Start, Goal, Obstacles, iterations=300, quit_on_goal=False,
+               seeded=True, seed= 123)
+        
+        print(rrt.plan()) # returns
+        
         # Now publish needed vel mesgs
         
         # Basic test of twist messages: Turn and move forward
-        twist_msg.angular.z = 0.94    
-        self.publisher.publish(twist_msg) #publish the needed angular first
-        time.sleep(2) # allow for movement
-        twist_msg.angular.z = 0.0 # Reset angular
-        twist_msg.linear.x = -0.075 # Move forward
-        self.publisher.publish(twist_msg) # publish again
-        time.sleep(1)
-        twist_msg.linear.x = 0.0
-        self.publisher.publish(twist_msg) 
-        time.sleep(0.1) # settle robot
+#         twist_msg.angular.z = 0.94    
+#         self.publisher.publish(twist_msg) #publish the needed angular first
+#         time.sleep(2) # allow for movement
+#         twist_msg.angular.z = 0.0 # Reset angular
+#         twist_msg.linear.x = -0.075 # Move forward
+#         self.publisher.publish(twist_msg) # publish again
+#         time.sleep(1)
+#         twist_msg.linear.x = 0.0
+#         self.publisher.publish(twist_msg) 
+#         time.sleep(0.1) # settle robot
         
 
-# Define astar algo, mostly from homework, textbook, GFG
-# Will not be using in Final, replace with RRT*
-def heuristic(a, b): #manhattan
-    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-def astar(grid, start, goal):
 
-    # moves possible (up down left right)
-    neighbors = [(0,1),(1,0),(-1,0),(0,-1)]
-
-    # prio q
-    frontier = PriorityQueue()
-    frontier.put(start, 0)
-
-    # needed to track the path
-    came_from = {}
-    cost_so_far = {}
-    came_from[start] = None
-    cost_so_far[start] = 0
-
-    while not frontier.empty():
-        current = frontier.get()
-
-        if current == goal:
-            break
-
-        for i, j in neighbors:
-            next_node = current[0] + i, current[1] + j
-            if 0 <= next_node[0] < grid.shape[0] and 0 <= next_node[1] < grid.shape[1]:
-                if grid[next_node] == 1: # Obstacle
-                    continue
-                new_cost = cost_so_far[current] + 1
-                if next_node not in cost_so_far or new_cost < cost_so_far[next_node]:
-                    cost_so_far[next_node] = new_cost
-                    priority = new_cost + heuristic(goal, next_node)
-                    frontier.put(next_node, priority)
-                    came_from[next_node] = current
-
-    # reconstruct the path
-    current = goal
-    path = []
-    while current != start:
-        path.append(current)
-        current = came_from[current]
-    path.append(start)
-    path.reverse()
-
-    return path
 
 # Main: do not change
 def main(args=None):

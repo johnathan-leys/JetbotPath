@@ -89,6 +89,24 @@ class ArucoNode(Node):
         
         # Now publish needed vel mesgs
         
+        for movement in path:
+            # Basic, not accurate movements yet
+            # switch angle first
+            twist_msg.linear.x = 0  # angle
+            twist_msg.angular.z = movement[1] # distance
+            self.publisher.publish(twist_msg)
+            time.sleep(1)
+            
+            twist_msg.linear.x = movement[0]  # angle
+            twist_msg.angular.z = 0 # distance
+            self.publisher.publish(twist_msg)
+            time.sleep(1)
+            
+            twist_msg.linear.x = 0  # angle
+            twist_msg.angular.z = 0 # distance
+            self.publisher.publish(twist_msg)
+            time.sleep(0.25)
+        
         # Basic test of twist messages: Turn and move forward
 #         twist_msg.angular.z = 0.94    
 #         self.publisher.publish(twist_msg) #publish the needed angular first

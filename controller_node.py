@@ -21,6 +21,7 @@ import os
 module_dir = '/home/jetbot/ece498/ws/src/aruco_controller/aruco_controller'
 sys.path.append(module_dir)
 from rrt_weighted_progress import *
+from Jetbot_Sim import *
 
 
 
@@ -75,8 +76,16 @@ class ArucoNode(Node):
         
         rrt = RRT(Start, Goal, Obstacles, iterations=300, quit_on_goal=False,
                seeded=True, seed= 123)
-        
-        print(rrt.plan()) # returns
+        rrtPoints = rrt.plan()
+        print('-------------------------------') 
+        print('RRT calculated points: ')
+        print(rrtPoints) 
+        print('-------------------------------') 
+               
+        path = calculate_robot_path(rrtPoints)
+        print("Calculated Robot Path:")
+        print(path)
+        print('-------------------------------') 
         
         # Now publish needed vel mesgs
         

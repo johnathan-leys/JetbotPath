@@ -60,6 +60,12 @@ def calculate_robot_path(points):
         point_a = points[i]
         point_b = points[i + 1]
 
+        # Check and convert point_a and point_b to tuples if they are NumPy arrays
+        if isinstance(point_a, np.ndarray):
+            point_a = tuple(point_a)
+        if isinstance(point_b, np.ndarray):
+            point_b = tuple(point_b)
+
         # Calculate the angle to the next point
         next_angle = math.atan2(point_b[1] - point_a[1], point_b[0] - point_a[0])
         relative_angle = next_angle - current_angle
@@ -77,7 +83,6 @@ def calculate_robot_path(points):
         current_angle = next_angle
 
     return angles_and_distances
-
 if __name__ == "__main__":
     points = read_points_from_file("sample_output.txt")
     print("x,y")

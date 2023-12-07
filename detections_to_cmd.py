@@ -35,6 +35,7 @@ class RRT:
         #TODO: add a better bound system
         self.max_bound = 1
         self.min_bound = -1
+        self.huge_cost = 1000
 
         self.graph = {(start, 0.0): []}
         self.points = []
@@ -121,22 +122,31 @@ class RRT:
                 plt.show()
 
         # find the closest point to the goal and use that for the path
+        best_path_end = [0, 0]
+        best_cost = self.huge_cost
         for parent, child in self.graph.items():
             for c in child:
                 if self.close_enough_to_goal(c[0]):
-                    print("iterations completed: " + str(self.iterations))
-                    path = self.get_final_path(c[0])
+                    if c[1] < best_cost:
+                        best_cost = c[1]
+                        best_path_end = list(c[0])
 
-                    fig, ax = plt.subplots()
-                    ax.set_title("i = " + str(self.iterations))
-                    self.plot_obstacles(ax)
-                    self.plot_path(ax, path)
-                    self.plot_graph(ax, self.graph)
 
-                    return path
+        if best_cost < self.huge_cost:
+            print("iterations completed: " + str(self.iterations))
+            path = self.get_final_path(c[0])
 
-        print("unable to find path in " + str(self.iterations) + " iterations");
-        return (0.0, 0.0)
+            fig, ax = plt.subplots()
+            ax.set_title("i = " + str(self.iterations))
+            self.plot_obstacles(ax)
+            self.plot_path(ax, path)
+            self.plot_graph(ax, self.graph)
+            return path
+
+        else:
+            print("unable to find path in " + str(self.iterations) + " iterations");
+
+            return (0.0, 0.0)
 
 
 

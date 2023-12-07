@@ -18,7 +18,7 @@ class RRT:
         self.seeded = seeded
         self.seed = seed
 
-        self.occasional_plot = False
+        self.occasional_plot = True
         self.quit_on_goal = quit_on_goal
         self.stepsize = 25
         self.point_separation = 0.05 #how far apart nodes on line are
@@ -105,7 +105,7 @@ class RRT:
 
                 return path
 
-            if i % 25 == 0 and self.occasional_plot:
+            if i % 1 == 0 and self.occasional_plot:
                 fig, ax = plt.subplots()
                 self.plot_obstacles(ax)
                 #self.plot_path(ax, path)
@@ -483,16 +483,19 @@ def main():
 
     s = 123
     rrt1 = RRT(start, goal, obstacles)
-    rrt2 = RRT(start, goal, obstacles, iterations=300, quit_on_goal=False,
-               seeded=True, seed=s)
-    rrt3 = RRT(start, goal, obstacles, iterations=600, quit_on_goal=False,
-               seeded=True, seed=s)
-    rrt4 = RRT(start, goal, obstacles, iterations=1200, quit_on_goal=False,
-               seeded=True, seed=s)
-    rrts = [rrt1, rrt2, rrt3, rrt4]
+    #rrt2 = RRT(start, goal, obstacles, iterations=300, quit_on_goal=False,
+    #           seeded=True, seed=s)
+    #rrt3 = RRT(start, goal, obstacles, iterations=600, quit_on_goal=False,
+    #           seeded=True, seed=s)
+    #rrt4 = RRT(start, goal, obstacles, iterations=1200, quit_on_goal=False,
+    #           seeded=True, seed=s)
+    #rrt5 = RRT(start, goal, obstacles, iterations=2000, quit_on_goal=False,
+    #           seeded=True, seed=s)
+    #rrts = [rrt1, rrt2, rrt3, rrt4, rrt5]
 
-    for i in range(4):
-        rrts[i].plan()
+    #for i in range(5):
+    #    rrts[i].plan()
+    rrt1.plan()
 
     plt.show()
 

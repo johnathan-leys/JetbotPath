@@ -6,11 +6,14 @@ from std_msgs.msg import String
 from geometry_msgs.msg import Twist
 
 import numpy as np
+import math
 import random
 import matplotlib.pyplot as plt
 import time
 
 twist = Twist()
+jetbot_path = []
+goal_angle = 0
 
 
 class RRT:
@@ -27,8 +30,8 @@ class RRT:
 
         self.occasional_plot = False
         self.quit_on_goal = quit_on_goal
-        self.stepsize = 20
-        self.point_separation = 0.04 #how far apart nodes on line are
+        self.stepsize = 25
+        self.point_separation = 0.05 #how far apart nodes on line are
         self.neighborhood_radius = neighborhood_radius
 
         self.radius = 0.05 # bot is a point for now
@@ -39,6 +42,7 @@ class RRT:
 
         self.graph = {(start, 0.0): []}
         self.points = []
+        self.path = []
 
 
 
@@ -55,10 +59,10 @@ class RRT:
 
             nearest_pt, cost = self.closest_point_on_graph(self.graph, rand_pt)
 
+            # chekc for collisions, take the first non-colliding point
             steps = int(np.floor(self.stepsize * cost))
             if steps <= 0: # skip points that are too close
                 continue
-
             all_pts = self.create_point_chain(nearest_pt, rand_pt, steps)
             collisions = self.points_will_collide(all_pts)
             if collisions[0]: # first point already collides
@@ -68,11 +72,12 @@ class RRT:
             if len(indices):
                 first_non_colliding = all_pts[indices[0] - 1][0]
             else:
-                # take cost from initial calc above
-                first_non_colliding = rand_pt
+                first_non_colliding = rand_pt # take cost from initial calc above
 
+            # find the lowest-cost point to connect to
             best_pt, new_pt_cost, neighbors = self.find_neighbors(nearest_pt, first_non_colliding)
 
+            # check collisions again with this new connection
             steps = int(np.floor(self.stepsize * new_pt_cost))
             if steps <= 0: # skip points that are too close
                 continue
@@ -88,6 +93,7 @@ class RRT:
                 n_cost = new_pt_cost + self.pythagoras(added_pt[0], n[0])
                 if n_cost < n[1]:
 
+                    # check for collisions
                     steps = int(np.floor(self.stepsize * n_cost))
                     if steps <= 0: # skip points that are too close
                         continue
@@ -98,21 +104,21 @@ class RRT:
 
                     new_n = (n[0], n_cost)
                     self.update_parent(self.graph, n, new_n, added_pt)
-                    self.graph[added_pt].append(n)
+                    self.graph[added_pt].append(new_n)
 
 
             # we reached the goal, quit the planning function
             if self.close_enough_to_goal(first_non_colliding) and self.quit_on_goal:
                 print("iterations reqired: " + str(i))
-                path = self.get_final_path(first_non_colliding)
+                self.path = self.get_final_path(first_non_colliding)
 
                 fig, ax = plt.subplots()
                 ax.set_title("i = " + str(i) + "(quit on goal found)")
                 self.plot_obstacles(ax)
-                self.plot_path(ax, path)
+                self.plot_path(ax, self.path)
                 self.plot_graph(ax, self.graph)
 
-                return path
+                return self.path
 
             if i % 1 == 0 and self.occasional_plot:
                 fig, ax = plt.subplots()
@@ -134,14 +140,14 @@ class RRT:
 
         if best_cost < self.huge_cost:
             print("iterations completed: " + str(self.iterations))
-            path = self.get_final_path(c[0])
+            self.path = self.get_final_path(tuple(best_path_end))
 
             fig, ax = plt.subplots()
             ax.set_title("i = " + str(self.iterations))
             self.plot_obstacles(ax)
-            self.plot_path(ax, path)
+            self.plot_path(ax, self.path)
             self.plot_graph(ax, self.graph)
-            return path
+            return self.path
 
         else:
             print("unable to find path in " + str(self.iterations) + " iterations");
@@ -174,6 +180,7 @@ class RRT:
             for c in children:
                 # if the point is in the list of children
                 if c[0][0] == old_pt[0][0] and c[0][1] == old_pt[0][1]:
+                    # remove oldpt from its parent
                     G[parent] = [x for x in G[parent] if (x[0][0] != old_pt[0][0] and
                                        x[0][1] != old_pt[0][1])]
 
@@ -520,6 +527,8 @@ class MinimalNode(Node):
     #            w=-0.04222169497831387)))
     def listener_callback(self, aruco_msg):
         global twist
+        global jetbot_path
+        global goal_angle
 
         # add points to list of markers
         mark = {}
@@ -543,45 +552,51 @@ class MinimalNode(Node):
         # robot assumed to be origin
         start = (0.0, 0.0)
         # x and z of goal, arbitray size
-        goal = (mark[2].x, mark[2].z, 0.1)
-        obstacles = [(mark[0].x, mark[0].z-0.05, 0.05),
-                     (mark[1].x, mark[1].z, 0.05)]
+        goal = (mark[0].x, mark[0].z, 0.05)
+        obstacles = [(mark[3].x, mark[3].z, 0.1),
+                     (mark[4].x, mark[4].z, 0.1)]
 
         rand_seed = np.random.randint(0, 1000);
         rrt1 = RRT(start, goal, obstacles, quit_on_goal=True,
                    seeded=True, seed=rand_seed,
-                   neighborhood_radius=0.2)
+                   neighborhood_radius=0.20)
 
         rrt2 = RRT(start, goal, obstacles, quit_on_goal=False,
                    seeded=True, seed=rand_seed, iterations=500,
-                   neighborhood_radius=0.2)
+                   neighborhood_radius=0.20)
 
-        rrt1.plan()
+        rrt3 = RRT(start, goal, obstacles, quit_on_goal=False,
+                   seeded=True, seed=rand_seed, iterations=1000,
+                   neighborhood_radius=0.20)
+
+        #rrt1.plan()
         rrt2.plan()
+        #rrt3.plan()
+        jetbot_path = rrt2.path
         #print(mark)
         #print(goal)
         #print(obstacles)
-        #print(rrt.path)
         #fig, ax = plt.subplots()
         #rrt.plot_obstacles(ax)
         #rrt.plot_path(ax, rrt.path)
         #rrt.plot_graph(ax, rrt.graph)
         plt.show()
 
-        starting_angle = np.arctan2(mark[2].x, mark[2].z)
-        print(np.rad2deg(starting_angle))
+        goal_angle = np.arctan2(mark[0].x, mark[0].z)
+        print(np.rad2deg(goal_angle))
 
         return
 
 def turn_k_degrees(k, pub_node):
     twist.linear.x = 0.00
     if k > 0:
-        twist.angular.z = 1.1
+        twist.angular.z = 1.18
     if k < 0:
-        twist.angular.z = -1.1
+        twist.angular.z = -1.18
     pub_node.publisher_.publish(twist)
-    for i in range(abs(k)):
-        time.sleep(0.015)
+
+    time.sleep(0.017*abs(k))
+
     twist.angular.z = 0.0
     pub_node.publisher_.publish(twist)
 
@@ -592,18 +607,69 @@ def move_k_centimeters(k, pub_node):
     if k < 0:
         twist.linear.x = 0.07
     pub_node.publisher_.publish(twist)
-    for i in range(abs(k)):
-        time.sleep(0.091)
+
+    time.sleep(0.091*abs(k))
+
     twist.angular.z = 0.0
     twist.linear.x = 0.0
     pub_node.publisher_.publish(twist)
 
+def follow_path(path, pub_node):
+    for angle, dist in path:
+        turn_k_degrees(-angle, pub_node)
+        move_k_centimeters(dist*100, pub_node)
+
+def calculate_robot_path(points, start_to_goal_angle):
+    angles_and_distances = []
+    # start looking at the goal
+    current_angle = np.deg2rad(90)
+
+    for i in range(len(points) - 1):
+        point_a = points[i]
+        point_b = points[i + 1]
+
+        # Check and convert point_a and point_b to tuples if they are NumPy arrays
+        if isinstance(point_a, np.ndarray):
+            point_a = tuple(point_a)
+        if isinstance(point_b, np.ndarray):
+            point_b = tuple(point_b)
+
+        # Calculate the angle to the next point
+        next_angle = math.atan2(point_b[1] - point_a[1], point_b[0] - point_a[0])
+        relative_angle = next_angle - current_angle
+
+        # Convert relative angle to degrees and ensure it is between -180 and 180 degrees
+        relative_angle_degrees = math.degrees(relative_angle) % 360
+        if relative_angle_degrees > 180:
+            relative_angle_degrees -= 360
+
+        # Calculate the distance to the next point
+        distance = math.sqrt((point_b[0] - point_a[0])**2 + (point_b[1] - point_a[1])**2)
+
+        angles_and_distances.append((relative_angle_degrees, distance))
+
+        current_angle = next_angle
+
+    return angles_and_distances
+
 def main(args=None):
+        global jetbot_path
+
         rclpy.init(args=args)
         minimal_node = MinimalNode()
         try:
             rclpy.spin_once(minimal_node)
             # move in a square
+
+            print('working?')
+            print(goal_angle)
+            turn_k_degrees(np.rad2deg(goal_angle), minimal_node)
+            s_to_g_angle = np.rad2deg(np.arctan2(jetbot_path[0][0], jetbot_path[0][1]))
+            print('s_to_g_angle', s_to_g_angle)
+            jetbot_path.reverse()
+            angle_and_dist = calculate_robot_path(jetbot_path, s_to_g_angle)
+            follow_path(angle_and_dist, minimal_node)
+
             #move_k_centimeters(30, minimal_node)
             #turn_k_degrees(90, minimal_node)
             #move_k_centimeters(30, minimal_node)

@@ -2,6 +2,7 @@
 # create a list of angles and distances from point a to b, where a is current and b is next. Iterate through and get the
 # angles,lengths until a "path" from start to goal is provided. Start from the starting point, The last pair. Just inverse the list first.
 import math
+import numpy as np
 
 def read_points_from_file(filename):
     points = []

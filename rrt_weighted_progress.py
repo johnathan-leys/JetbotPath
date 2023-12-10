@@ -18,7 +18,7 @@ class RRT:
         self.seeded = seeded
         self.seed = seed
 
-        self.occasional_plot = True
+        self.occasional_plot = False
         self.quit_on_goal = quit_on_goal
         self.stepsize = 25
         self.point_separation = 0.05 #how far apart nodes on line are
@@ -27,6 +27,7 @@ class RRT:
         self.radius = 0.05 # bot is a point for now
         self.max_bound = 1.2
         self.min_bound = -0.3
+        self.huge_cost = 1000
 
         self.graph = {(start, 0.0): []}
         self.points = []
@@ -89,7 +90,7 @@ class RRT:
 
                     new_n = (n[0], n_cost)
                     self.update_parent(self.graph, n, new_n, added_pt)
-                    self.graph[added_pt].append(n)
+                    self.graph[added_pt].append(new_n)
 
 
             # we reached the goal, quit the planning function
@@ -112,23 +113,31 @@ class RRT:
                 self.plot_graph(ax, self.graph)
                 plt.show()
 
-        # find the closest point to the goal and use that for the path
+        best_path_end = [0, 0]
+        best_cost = self.huge_cost
         for parent, child in self.graph.items():
             for c in child:
                 if self.close_enough_to_goal(c[0]):
-                    print("iterations completed: " + str(self.iterations))
-                    path = self.get_final_path(c[0])
+                    if c[1] < best_cost:
+                        best_cost = c[1]
+                        best_path_end = list(c[0])
 
-                    fig, ax = plt.subplots()
-                    ax.set_title("i = " + str(self.iterations))
-                    self.plot_obstacles(ax)
-                    self.plot_path(ax, path)
-                    self.plot_graph(ax, self.graph)
 
-                    return path
+        if best_cost < self.huge_cost:
+            print("iterations completed: " + str(self.iterations))
+            self.path = self.get_final_path(tuple(best_path_end))
 
-        print("unable to find path in " + str(self.iterations) + " iterations");
-        return (0.0, 0.0)
+            fig, ax = plt.subplots()
+            ax.set_title("i = " + str(self.iterations))
+            self.plot_obstacles(ax)
+            self.plot_path(ax, self.path)
+            self.plot_graph(ax, self.graph)
+            return self.path
+
+        else:
+            print("unable to find path in " + str(self.iterations) + " iterations");
+
+            return (0.0, 0.0)
 
 
 
@@ -483,19 +492,18 @@ def main():
 
     s = 123
     rrt1 = RRT(start, goal, obstacles)
-    #rrt2 = RRT(start, goal, obstacles, iterations=300, quit_on_goal=False,
-    #           seeded=True, seed=s)
-    #rrt3 = RRT(start, goal, obstacles, iterations=600, quit_on_goal=False,
-    #           seeded=True, seed=s)
-    #rrt4 = RRT(start, goal, obstacles, iterations=1200, quit_on_goal=False,
-    #           seeded=True, seed=s)
-    #rrt5 = RRT(start, goal, obstacles, iterations=2000, quit_on_goal=False,
-    #           seeded=True, seed=s)
-    #rrts = [rrt1, rrt2, rrt3, rrt4, rrt5]
+    rrt2 = RRT(start, goal, obstacles, iterations=300, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrt3 = RRT(start, goal, obstacles, iterations=600, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrt4 = RRT(start, goal, obstacles, iterations=1200, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrt5 = RRT(start, goal, obstacles, iterations=2000, quit_on_goal=False,
+               seeded=True, seed=s)
+    rrts = [rrt1, rrt2, rrt3, rrt4, rrt5]
 
-    #for i in range(5):
-    #    rrts[i].plan()
-    rrt1.plan()
+    for i in range(5):
+        rrts[i].plan()
 
     plt.show()
 
